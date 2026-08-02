@@ -1,0 +1,12 @@
+.git
+.DS_Store
+.uv-cache
+node_modules
+dist
+*.png
+design-qa.md
+qa-comparison.html
+apps/web-service/.venv
+apps/web-service/.env
+apps/web-service/.pytest_cache
+apps/web-service/__pycache__
