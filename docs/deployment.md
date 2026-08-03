@@ -58,8 +58,9 @@ openssl rand -hex 32
 - `REGISTRATION_INVITE_CODES`：私有邀请码，多个用英文逗号分隔。
 - `WECHAT_MINI_APP_ID`：KW 小程序 AppID。
 - `WECHAT_MINI_APP_SECRET`：KW 小程序 AppSecret，只保存在服务器。
+- `WECHAT_MINI_ENV_VERSION`：PC 扫码打开的小程序版本；正式发布后使用 `release`，体验阶段可临时使用 `trial`。
 
-不需要配置微信开放平台网站应用 AppID。
+PC 微信登录使用后端生成的一次性小程序码：微信扫一扫会直接打开 KW 小程序确认页，因此不需要配置或付费申请微信开放平台网站应用 AppID。
 
 ## 5. 启动 KW
 

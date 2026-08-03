@@ -1398,12 +1398,14 @@ textarea:focus-visible { outline-color: #668fd7; }
 .auth-qr-stage { height: 298px; margin-top: 13px; position: relative; overflow: hidden; display: grid; place-items: center; background: #fbfcfe; border: 1px solid #e2e8f0; border-radius: 11px; }
 .auth-qr-mount { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: center; overflow: hidden; }
 .auth-qr-mount iframe { width: 300px !important; height: 400px !important; margin-top: -12px; border: 0; transform: scale(.78); transform-origin: top center; }
+.auth-mini-program-code { inset: auto; width: min(76%, 228px); height: auto; padding: 10px; object-fit: contain; background: #fff; border: 1px solid #e8edf5; border-radius: 18px; box-shadow: 0 16px 38px rgba(55, 76, 112, .1); }
 .auth-qr-state { position: absolute; inset: 0; z-index: 2; padding: 30px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: #728096; background: #fbfcfe; text-align: center; }
 .auth-qr-state > svg { width: 42px; height: 42px; color: #6f92c8; }
 .auth-qr-state strong { color: #3c4f68; font-size: 12px; }
 .auth-qr-state small { color: #95a0ae; font-size: 9px; }
 .auth-qr-state button { height: 34px; margin-top: 5px; padding: 0 15px; color: #fff; background: #668fd7; border: 0; border-radius: 8px; cursor: pointer; font-size: 10px; font-weight: 700; }
 .auth-qr-state.is-error > svg { color: #c0777d; }
+.auth-qr-state.is-success > svg { color: #49a887; }
 .auth-qr-help { margin: 10px 10px 0; color: #8290a2; text-align: center; font-size: 9px; line-height: 1.6; }
 .auth-wechat-fallback { margin: 6px auto 0; padding: 4px 7px; color: #7185a0; background: transparent; border: 0; cursor: pointer; font-size: 9px; }
 .auth-wechat-fallback:hover { color: #3f669d; }

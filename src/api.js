@@ -89,6 +89,11 @@ export const api = {
   login: (payload) => request("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   register: (payload) => request("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
   wechatStatus: () => request("/auth/wechat/status"),
+  createWechatScanSession: () => request("/auth/wechat/scan/sessions", { method: "POST" }),
+  pollWechatScanSession: (ticket, pollToken) => request(`/auth/wechat/scan/sessions/${ticket}/poll`, {
+    method: "POST",
+    body: JSON.stringify({ poll_token: pollToken }),
+  }),
   wechatQrConfig: ({ inviteCode = "", nextPath = "/" } = {}) => {
     const query = new URLSearchParams({ next_path: nextPath });
     if (inviteCode) query.set("invite_code", inviteCode);

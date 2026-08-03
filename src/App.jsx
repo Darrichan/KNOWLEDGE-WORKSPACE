@@ -1971,7 +1971,7 @@ export function App() {
   const shellClass = useMemo(() => ["app-shell", sidebarCollapsed ? "sidebar-is-collapsed" : "", `theme-${appearanceTheme}`, glassEnabled ? "has-glass" : ""].filter(Boolean).join(" "), [appearanceTheme, glassEnabled, sidebarCollapsed]);
   if (sessionState === "loading") return <main className="app-loading"><img className="brand-loading-lockup" src="/brand/knowledge-workspace-lockup.png" alt="Knowledge Workspace" /><strong>正在连接知识节点…</strong></main>;
   if (sessionState === "error") return <main className="app-loading is-error"><div className="brand-mark">!</div><strong>{bootError}</strong><button onClick={() => window.location.reload()}>重新连接</button></main>;
-  if (sessionState === "anonymous") return <AuthScreen onAuthenticate={authenticate} />;
+  if (sessionState === "anonymous") return <AuthScreen onAuthenticate={authenticate} onWechatAuthenticated={hydrateWorkspace} />;
   if (!user || !workspace) return null;
 
   const pageActions = { onDuplicate: duplicateItem, onMove: showMove, onDelete: deleteItem, onBatchDelete: requestBatchDelete, onBatchPermanentDelete: requestBatchPermanentDelete, onHistory: showHistory, onRestore: restoreTrashItem, onPermanentDelete: requestPermanentDelete };

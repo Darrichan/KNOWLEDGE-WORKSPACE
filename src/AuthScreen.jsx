@@ -1,32 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { ArrowRight, EnvelopeSimple, QrCode, SpinnerGap, WechatLogo } from "@phosphor-icons/react";
+import { useEffect, useState } from "react";
+import { ArrowRight, CheckCircle, EnvelopeSimple, QrCode, SpinnerGap, WechatLogo } from "@phosphor-icons/react";
 import { api } from "./api.js";
 import { SliderCaptcha } from "./SliderCaptcha.jsx";
 
-let wechatLoginScriptPromise;
-
-function loadWechatLoginScript() {
-  if (window.WxLogin) return Promise.resolve();
-  if (wechatLoginScriptPromise) return wechatLoginScriptPromise;
-  wechatLoginScriptPromise = new Promise((resolve, reject) => {
-    const existing = document.querySelector('script[data-kw-wechat-login="true"]');
-    if (existing) {
-      existing.addEventListener("load", resolve, { once: true });
-      existing.addEventListener("error", () => reject(new Error("微信二维码组件加载失败")), { once: true });
-      return;
-    }
-    const script = document.createElement("script");
-    script.src = "https://res.wx.qq.com/connect/zh_CN/htmledition/js/wxLogin.js";
-    script.async = true;
-    script.dataset.kwWechatLogin = "true";
-    script.addEventListener("load", resolve, { once: true });
-    script.addEventListener("error", () => reject(new Error("微信二维码组件加载失败")), { once: true });
-    document.head.appendChild(script);
-  });
-  return wechatLoginScriptPromise;
-}
-
-export function AuthScreen({ onAuthenticate }) {
+export function AuthScreen({ onAuthenticate, onWechatAuthenticated }) {
   const [mode, setMode] = useState("login");
   const [method, setMethod] = useState("email");
   const [form, setForm] = useState({ email: "", display_name: "", public_id: "", password: "", invite_code: "" });
@@ -35,8 +12,7 @@ export function AuthScreen({ onAuthenticate }) {
   const [captchaOpen, setCaptchaOpen] = useState(false);
   const [wechat, setWechat] = useState({ loading: true, configured: false });
   const [qrRequest, setQrRequest] = useState(0);
-  const [qrState, setQrState] = useState({ loading: false, error: "" });
-  const qrMountRef = useRef(null);
+  const [qrState, setQrState] = useState({ loading: false, error: "", session: null, confirmed: false });
 
   useEffect(() => {
     api.wechatStatus()
@@ -45,41 +21,50 @@ export function AuthScreen({ onAuthenticate }) {
   }, []);
 
   useEffect(() => {
-    if (method !== "wechat" || !wechat.configured) return undefined;
-    if (mode === "register" && qrRequest === 0) return undefined;
+    if (method !== "wechat" || mode !== "login" || !wechat.configured) return undefined;
 
     let cancelled = false;
-    const mountQrCode = async () => {
-      setQrState({ loading: true, error: "" });
+    let pollTimer = null;
+    const startMiniProgramScan = async () => {
+      setQrState({ loading: true, error: "", session: null, confirmed: false });
       try {
-        const config = await api.wechatQrConfig({
-          inviteCode: mode === "register" ? form.invite_code.trim() : "",
-          nextPath: "/",
-        });
-        if (!config.configured) throw new Error("微信开放平台登录尚未配置");
-        await loadWechatLoginScript();
-        if (cancelled || !qrMountRef.current) return;
-        qrMountRef.current.replaceChildren();
-        new window.WxLogin({
-          self_redirect: false,
-          id: qrMountRef.current.id,
-          appid: config.appid,
-          scope: config.scope,
-          redirect_uri: encodeURIComponent(config.redirect_uri),
-          state: config.state,
-          style: "black",
-        });
-        setQrState({ loading: false, error: "" });
+        const scanSession = await api.createWechatScanSession();
+        if (cancelled) return;
+        setQrState({ loading: false, error: "", session: scanSession, confirmed: false });
+        const poll = async () => {
+          if (cancelled) return;
+          try {
+            const result = await api.pollWechatScanSession(scanSession.ticket, scanSession.poll_token);
+            if (cancelled) return;
+            if (result.status === "confirmed" && result.user) {
+              setQrState({ loading: false, error: "", session: scanSession, confirmed: true });
+              await onWechatAuthenticated(result.user);
+              return;
+            }
+            if (result.status === "expired") {
+              setQrState({ loading: false, error: "二维码已过期，请刷新后重试", session: null, confirmed: false });
+              return;
+            }
+            if (result.status === "consumed") {
+              setQrState({ loading: false, error: "二维码已经使用，请重新生成", session: null, confirmed: false });
+              return;
+            }
+            pollTimer = window.setTimeout(poll, 1500);
+          } catch (pollError) {
+            if (!cancelled) setQrState({ loading: false, error: pollError.message || "登录状态检查失败，请重试", session: null, confirmed: false });
+          }
+        };
+        pollTimer = window.setTimeout(poll, 1200);
       } catch (qrError) {
-        if (!cancelled) setQrState({ loading: false, error: qrError.message || "二维码加载失败，请稍后重试" });
+        if (!cancelled) setQrState({ loading: false, error: qrError.message || "小程序码生成失败，请稍后重试", session: null, confirmed: false });
       }
     };
-    mountQrCode();
+    startMiniProgramScan();
     return () => {
       cancelled = true;
-      if (qrMountRef.current) qrMountRef.current.replaceChildren();
+      if (pollTimer) window.clearTimeout(pollTimer);
     };
-  }, [method, mode, qrRequest, wechat.configured]);
+  }, [method, mode, qrRequest, wechat.configured, onWechatAuthenticated]);
 
   const authenticate = async (captchaTicket = null) => {
     setSubmitting(true);
@@ -102,28 +87,10 @@ export function AuthScreen({ onAuthenticate }) {
     setCaptchaOpen(true);
   };
 
-  const startWechatLogin = () => {
-    if (!wechat.configured) {
-      setError("微信开放平台参数尚未配置，请先使用邮箱登录");
-      return;
-    }
-    if (mode === "register" && !form.invite_code.trim()) {
-      setError("微信扫码注册前请先填写邀请码");
-      return;
-    }
-    const query = new URLSearchParams({ next_path: "/" });
-    if (mode === "register") query.set("invite_code", form.invite_code.trim());
-    window.location.assign(`/api/v1/auth/wechat/authorize?${query}`);
-  };
-
   const requestWechatQr = () => {
     setError("");
     if (!wechat.configured) {
-      setError("微信开放平台参数尚未配置，请先使用邮箱登录");
-      return;
-    }
-    if (mode === "register" && !form.invite_code.trim()) {
-      setError("微信扫码注册前请先填写邀请码");
+      setError("微信小程序参数尚未配置，请先使用邮箱登录");
       return;
     }
     setQrRequest((value) => value + 1);
@@ -131,8 +98,9 @@ export function AuthScreen({ onAuthenticate }) {
 
   const switchMode = () => {
     setMode((current) => current === "login" ? "register" : "login");
+    setMethod("email");
     setQrRequest(0);
-    setQrState({ loading: false, error: "" });
+    setQrState({ loading: false, error: "", session: null, confirmed: false });
     setError("");
   };
 
@@ -172,19 +140,21 @@ export function AuthScreen({ onAuthenticate }) {
             </div>
           ) : (
             <div className="auth-wechat-panel">
-              {mode === "register" && (
-                <label>邀请码<input required minLength={6} maxLength={128} autoComplete="one-time-code" value={form.invite_code} onChange={(event) => { setForm({ ...form, invite_code: event.target.value.trimStart() }); setQrRequest(0); }} placeholder="先填写邀请码，再生成二维码" /><small>扫码注册后会自动创建并绑定当前微信账号</small></label>
-              )}
               <div className="auth-qr-stage">
-                <div id="kw-wechat-login-qr" className="auth-qr-mount" ref={qrMountRef} />
+                {qrState.session?.qr_code_data_url && !qrState.confirmed ? <img className="auth-qr-mount auth-mini-program-code" src={qrState.session.qr_code_data_url} alt="KW 小程序登录码" /> : null}
                 {wechat.loading || qrState.loading ? <div className="auth-qr-state"><SpinnerGap className="is-spinning" /><strong>正在生成二维码</strong></div> : null}
-                {!wechat.loading && !wechat.configured ? <div className="auth-qr-state"><QrCode /><strong>微信登录尚未配置</strong><small>请先使用邮箱方式登录</small></div> : null}
-                {mode === "register" && qrRequest === 0 && wechat.configured ? <div className="auth-qr-state"><QrCode /><strong>填写邀请码后生成二维码</strong><button type="button" onClick={requestWechatQr}>生成注册二维码</button></div> : null}
+                {!wechat.loading && !wechat.configured ? <div className="auth-qr-state"><QrCode /><strong>微信小程序登录尚未配置</strong><small>请先使用邮箱方式登录</small></div> : null}
+                {mode === "register" && wechat.configured ? <div className="auth-qr-state"><QrCode /><strong>请先使用邀请码创建账户</strong><small>注册后在小程序“我的”页面绑定微信，即可扫码登录 PC</small></div> : null}
                 {qrState.error ? <div className="auth-qr-state is-error"><QrCode /><strong>{qrState.error}</strong><button type="button" onClick={requestWechatQr}>重新加载</button></div> : null}
+                {qrState.confirmed ? <div className="auth-qr-state is-success"><CheckCircle weight="fill" /><strong>手机已确认</strong><small>正在进入工作空间…</small></div> : null}
               </div>
               {error && <div className="auth-error">{error}</div>}
-              <p className="auth-qr-help">请使用微信扫描二维码，确认后将在当前电脑完成{mode === "login" ? "登录" : "注册"}。</p>
-              <button className="auth-wechat-fallback" type="button" disabled={wechat.loading || !wechat.configured} onClick={startWechatLogin}>二维码无法显示？打开微信授权页</button>
+              <p className="auth-qr-help">{mode === "login" ? "微信扫一扫将直接打开 KW 小程序，确认后当前电脑会自动登录。" : "为了保持邀请制，请先使用邀请码创建账户，再在小程序里绑定微信。"}</p>
+              {mode === "login" ? (
+                <button className="auth-wechat-fallback" type="button" disabled={wechat.loading || !wechat.configured || qrState.loading} onClick={requestWechatQr}>刷新小程序码</button>
+              ) : (
+                <button className="auth-wechat-fallback" type="button" onClick={() => setMethod("email")}>使用邀请码注册</button>
+              )}
             </div>
           )}
           <button className="auth-mode-switch" type="button" onClick={switchMode}>

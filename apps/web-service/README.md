@@ -82,6 +82,9 @@ WECHAT_LOGIN_SUCCESS_URL=https://你的域名/
 ```env
 WECHAT_MINI_APP_ID=小程序AppID
 WECHAT_MINI_APP_SECRET=小程序AppSecret
+WECHAT_MINI_ENV_VERSION=release
 ```
 
 `AppSecret` 只能配置在后端或云函数中，不能写入小程序前端代码。使用云函数中转时，保留同样的一对一数据库约束即可。
+
+PC 端扫码登录复用这组小程序参数。后端生成五分钟有效的一次性小程序码，微信扫码后直接进入 `pages/scan-login/index` 确认；PC 使用独立轮询密钥领取登录态，不依赖微信开放平台网站应用。

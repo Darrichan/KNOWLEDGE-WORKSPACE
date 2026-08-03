@@ -1,3 +1,4 @@
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -38,6 +39,33 @@ class CaptchaTicketResponse(BaseModel):
 
 class WechatMiniBindRequest(BaseModel):
     code: str = Field(min_length=1, max_length=256)
+
+
+class WechatScanConfirmRequest(WechatMiniBindRequest):
+    ticket: str = Field(min_length=32, max_length=32, pattern="^[a-f0-9]{32}$")
+
+
+class WechatScanPollRequest(BaseModel):
+    poll_token: str = Field(min_length=32, max_length=128)
+
+
+class WechatScanCreateResponse(BaseModel):
+    ticket: str
+    poll_token: str
+    qr_code_data_url: str
+    expires_in: int
+    provider: Literal["wechat-mini-program"] = "wechat-mini-program"
+
+
+class WechatScanPollResponse(BaseModel):
+    status: Literal["pending", "confirmed", "expired", "consumed"]
+    expires_in: int = 0
+    user: "UserResponse | None" = None
+
+
+class WechatScanConfirmResponse(BaseModel):
+    status: Literal["confirmed"] = "confirmed"
+    user: "UserResponse"
 
 
 class WechatBindingResponse(BaseModel):

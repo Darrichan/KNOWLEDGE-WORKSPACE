@@ -35,6 +35,7 @@ services:
       WECHAT_LOGIN_SUCCESS_URL: ${WECHAT_LOGIN_SUCCESS_URL:-http://localhost:8080/}
       WECHAT_MINI_APP_ID: ${WECHAT_MINI_APP_ID:-}
       WECHAT_MINI_APP_SECRET: ${WECHAT_MINI_APP_SECRET:-}
+      WECHAT_MINI_ENV_VERSION: ${WECHAT_MINI_ENV_VERSION:-release}
     depends_on:
       db:
         condition: service_healthy

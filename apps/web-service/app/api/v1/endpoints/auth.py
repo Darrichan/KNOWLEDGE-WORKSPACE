@@ -27,6 +27,11 @@ from app.schema.auth import (
     UserResponse,
     WechatBindingResponse,
     WechatMiniBindRequest,
+    WechatScanConfirmRequest,
+    WechatScanConfirmResponse,
+    WechatScanCreateResponse,
+    WechatScanPollRequest,
+    WechatScanPollResponse,
 )
 from app.service.auth_service import authenticate_user, register_user
 from app.service.wechat_auth_service import (
@@ -36,6 +41,11 @@ from app.service.wechat_auth_service import (
     get_wechat_binding_status,
     login_mini_program_user,
     login_or_register_wechat_user,
+)
+from app.service.wechat_scan_login_service import (
+    confirm_scan_login_session,
+    create_scan_login_session,
+    poll_scan_login_session,
 )
 
 router = APIRouter()
@@ -81,15 +91,59 @@ async def bind_wechat_mini_program(
     )
 
 
+@router.post("/wechat/scan/sessions", response_model=WechatScanCreateResponse)
+async def create_wechat_scan_session(session: SessionDep) -> WechatScanCreateResponse:
+    scan_session, poll_token, qr_code_data_url = await create_scan_login_session(session)
+    settings = get_settings()
+    return WechatScanCreateResponse(
+        ticket=scan_session.ticket,
+        poll_token=poll_token,
+        qr_code_data_url=qr_code_data_url,
+        expires_in=settings.wechat_scan_login_ttl_seconds,
+    )
+
+
+@router.post(
+    "/wechat/scan/sessions/{ticket}/poll",
+    response_model=WechatScanPollResponse,
+)
+async def poll_wechat_scan_session(
+    ticket: str,
+    payload: WechatScanPollRequest,
+    response: Response,
+    session: SessionDep,
+) -> WechatScanPollResponse:
+    scan_status, expires_in, user, token = await poll_scan_login_session(
+        session, ticket, payload.poll_token
+    )
+    if token:
+        set_access_cookie(response, token)
+    return WechatScanPollResponse(
+        status=scan_status,
+        expires_in=expires_in,
+        user=UserResponse.model_validate(user) if user else None,
+    )
+
+
+@router.post(
+    "/wechat/mini/scan-confirm",
+    response_model=WechatScanConfirmResponse,
+)
+async def confirm_wechat_scan_session(
+    payload: WechatScanConfirmRequest,
+    session: SessionDep,
+) -> WechatScanConfirmResponse:
+    identity_data = await exchange_mini_program_code(payload.code.strip())
+    user, _ = await login_mini_program_user(session, identity_data)
+    await confirm_scan_login_session(session, payload.ticket, user)
+    return WechatScanConfirmResponse(user=UserResponse.model_validate(user))
+
+
 @router.get("/wechat/status")
 async def wechat_status() -> dict[str, bool | str]:
     settings = get_settings()
-    configured = bool(
-        settings.wechat_open_app_id
-        and settings.wechat_open_app_secret
-        and settings.wechat_open_redirect_uri
-    )
-    return {"configured": configured, "provider": "wechat-open-platform"}
+    configured = bool(settings.wechat_mini_app_id and settings.wechat_mini_app_secret)
+    return {"configured": configured, "provider": "wechat-mini-program"}
 
 
 @router.get("/wechat/qr-config")

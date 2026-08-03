@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     wechat_login_success_url: str = "http://localhost:8080/"
     wechat_mini_app_id: str = ""
     wechat_mini_app_secret: str = ""
+    wechat_mini_env_version: str = "release"
+    wechat_scan_login_ttl_seconds: int = Field(default=300, ge=60, le=600)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
