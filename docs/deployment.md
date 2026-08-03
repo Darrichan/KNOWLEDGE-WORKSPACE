@@ -22,7 +22,7 @@ KW 的 PostgreSQL 和 FastAPI 不映射到宿主机或公网，只有 Web 容器
 1. 在 DNS 添加 A 记录：
 
    ```text
-   kw.darrichan.top -> 155.103.157.205
+   kw.darrichan.top -> 156.225.23.173
    ```
 
 2. 确认服务器仍只对公网开放 `22`/`80`/`443`。
@@ -194,7 +194,7 @@ chown -R deploy:deploy /opt/knowledge-workspace
 
 | Secret | 值 |
 |---|---|
-| `KW_DEPLOY_HOST` | `155.103.157.205` |
+| `KW_DEPLOY_HOST` | `156.225.23.173` |
 | `KW_DEPLOY_PORT` | `22` |
 | `KW_DEPLOY_USER` | `deploy` |
 | `KW_DEPLOY_SSH_KEY` | GitHub Actions 专用 SSH 私钥完整内容 |
@@ -211,7 +211,7 @@ chown -R deploy:deploy /opt/knowledge-workspace
 在可信任的本地环境生成 `KW_DEPLOY_KNOWN_HOSTS` 内容：
 
 ```bash
-ssh-keyscan -H -p 22 155.103.157.205
+ssh-keyscan -H -p 22 156.225.23.173
 ```
 
 添加 GitHub `production` Environment，可选开启 Required reviewers。开启后，每次部署只需在 GitHub 点击一次批准，无需 SSH 登录服务器。
