@@ -1,0 +1,2 @@
+Defaults:deploy env_keep += "KW_DEPLOY_SHA"
+deploy ALL=(root) NOPASSWD: /usr/local/sbin/deploy-kw

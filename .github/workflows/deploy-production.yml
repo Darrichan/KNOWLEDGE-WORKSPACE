@@ -56,7 +56,11 @@ jobs:
         run: uv sync --frozen && uv run ruff check app
 
       - name: Validate production Compose
-        run: docker compose --env-file deploy/.env.production.example -f deploy/compose.prod.yaml config --quiet
+        run: |
+          docker compose --env-file deploy/.env.production.example \
+            -f deploy/compose.prod.yaml config --quiet
+          docker compose --env-file deploy/.env.production.example \
+            -f deploy/secure/compose.yaml config --quiet
 
   deploy:
     name: Deploy to Hong Kong server
@@ -84,21 +88,5 @@ jobs:
         run: |
           ssh -i ~/.ssh/kw_deploy -p "${DEPLOY_PORT:-22}" \
             -o BatchMode=yes -o StrictHostKeyChecking=yes \
-            "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -se' <<'REMOTE'
-          set -Eeuo pipefail
-          exec 9>/tmp/kw-production-deploy.lock
-          flock -n 9 || { echo "Another KW deployment is already running"; exit 1; }
-          cd /opt/knowledge-workspace
-          test -f deploy/.env.production
-          test -z "$(git status --porcelain --untracked-files=no)" || {
-            echo "Production checkout contains tracked local changes; deployment stopped"
-            exit 1
-          }
-          git fetch origin main
-          git checkout main
-          git pull --ff-only origin main
-          make prod-up
-          make prod-status
-          curl --fail --silent --show-error --retry 6 --retry-delay 5 \
-            http://127.0.0.1:8081/health
-          REMOTE
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "KW_DEPLOY_SHA=${GITHUB_SHA} sudo -n /usr/local/sbin/deploy-kw"

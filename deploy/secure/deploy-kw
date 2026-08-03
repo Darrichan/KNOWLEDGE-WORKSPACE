@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly repository="/opt/knowledge-workspace"
+readonly runtime_dir="/etc/knowledge-workspace"
+readonly compose_file="${runtime_dir}/compose.yaml"
+readonly environment_file="${runtime_dir}/env"
+readonly expected_remote="https://github.com/Darrichan/KNOWLEDGE-WORKSPACE.git"
+readonly health_url="http://127.0.0.1:8081/health"
+
+requested_sha="${KW_DEPLOY_SHA:-}"
+if [[ ! "${requested_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+  echo "KW_DEPLOY_SHA must be an exact 40-character lowercase commit SHA" >&2
+  exit 64
+fi
+
+if [[ "$(id -u)" -ne 0 ]]; then
+  echo "deploy-kw must run through the approved sudo rule" >&2
+  exit 77
+fi
+
+exec 9>/run/lock/kw-production-deploy.lock
+flock -n 9 || {
+  echo "Another KW deployment is already running" >&2
+  exit 75
+}
+
+for protected_file in \
+  "${compose_file}" \
+  "${environment_file}" \
+  "${runtime_dir}/Dockerfile.api" \
+  "${runtime_dir}/Dockerfile.web"; do
+  [[ -f "${protected_file}" ]] || {
+    echo "Missing protected runtime file: ${protected_file}" >&2
+    exit 78
+  }
+  [[ "$(stat -c '%U:%G' "${protected_file}")" == "root:root" ]] || {
+    echo "Protected runtime file is not owned by root: ${protected_file}" >&2
+    exit 78
+  }
+  protected_mode="$(stat -c '%a' "${protected_file}")"
+  if (( (8#${protected_mode} & 8#022) != 0 )); then
+    echo "Protected runtime file is writable by other users: ${protected_file}" >&2
+    exit 78
+  fi
+done
+
+actual_remote="$(git -C "${repository}" remote get-url origin)"
+[[ "${actual_remote}" == "${expected_remote}" ]] || {
+  echo "Unexpected Git remote: ${actual_remote}" >&2
+  exit 78
+}
+
+if [[ -n "$(git -C "${repository}" status --porcelain --untracked-files=no)" ]]; then
+  echo "Production checkout contains tracked local changes" >&2
+  exit 78
+fi
+
+git -C "${repository}" fetch --quiet origin main
+current_main="$(git -C "${repository}" rev-parse origin/main)"
+[[ "${requested_sha}" == "${current_main}" ]] || {
+  echo "Requested SHA is not the current origin/main" >&2
+  exit 65
+}
+
+git -C "${repository}" checkout --quiet --detach "${requested_sha}"
+
+compose=(docker compose --env-file "${environment_file}" -f "${compose_file}")
+"${compose[@]}" config >/dev/null
+"${compose[@]}" up -d --build
+"${compose[@]}" ps
+
+curl --fail --silent --show-error --retry 8 --retry-delay 5 "${health_url}"
+echo
+echo "KW deployment completed at ${requested_sha}"
