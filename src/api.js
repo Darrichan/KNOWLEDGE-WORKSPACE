@@ -88,6 +88,12 @@ export const api = {
   verifyCaptcha: (payload) => request("/auth/captcha/verify", { method: "POST", body: JSON.stringify(payload) }),
   login: (payload) => request("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   register: (payload) => request("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
+  wechatStatus: () => request("/auth/wechat/status"),
+  wechatQrConfig: ({ inviteCode = "", nextPath = "/" } = {}) => {
+    const query = new URLSearchParams({ next_path: nextPath });
+    if (inviteCode) query.set("invite_code", inviteCode);
+    return request(`/auth/wechat/qr-config?${query}`);
+  },
   wechatBinding: () => request("/auth/wechat/binding"),
   logout: () => request("/auth/logout", { method: "POST" }),
   listWorkspaces: () => request("/workspaces"),

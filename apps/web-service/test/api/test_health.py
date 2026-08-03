@@ -26,5 +26,6 @@ def test_core_routes_are_in_openapi() -> None:
     paths = app.openapi()["paths"]
 
     assert "/api/v1/auth/register" in paths
+    assert "/api/v1/auth/wechat/qr-config" in paths
     assert "/api/v1/workspaces" in paths
     assert "/api/v1/documents/{document_id}" in paths

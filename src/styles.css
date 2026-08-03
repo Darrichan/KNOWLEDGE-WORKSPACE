@@ -1365,20 +1365,83 @@ textarea:focus-visible { outline-color: #668fd7; }
 
 /* Functional workspace — navigation, dialogs and restrained authentication */
 .auth-shell-simple {
+  width: 100%;
+  height: 100vh;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 1fr;
-  place-items: center;
-  padding: 32px 18px;
+  place-items: start center;
+  padding: clamp(24px, 5vh, 54px) 18px;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: #f4f6f9;
 }
-.auth-simple-wrap { width: min(390px, 100%); }
-.auth-brand-centered { margin: 0 auto 24px; justify-content: center; }
-.auth-card-simple { width: 100%; padding: 32px; border-radius: 12px; box-shadow: 0 14px 38px rgba(42,56,78,.07); }
+.auth-simple-wrap { width: min(500px, 100%); }
+.auth-brand-centered { margin: 0 auto 22px; justify-content: center; }
+.auth-brand-centered .auth-brand-lockup { width: min(286px, 74vw); }
+.auth-card-simple { width: 100%; padding: 32px 38px; border-radius: 14px; box-shadow: 0 14px 38px rgba(42,56,78,.07); }
 .auth-card-simple .auth-card-heading { text-align: center; }
-.auth-card-simple .auth-card-heading h1 { margin: 0 0 8px; color: #23334a; font-size: 26px; letter-spacing: -.6px; }
-.auth-card-simple .auth-card-heading p { margin-bottom: 24px; }
+.auth-card-simple .auth-card-heading h1 { margin: 0 0 8px; color: #23334a; font-size: 29px; letter-spacing: -.6px; }
+.auth-card-simple .auth-card-heading p { margin-bottom: 18px; }
+.auth-card-simple label { font-size: 12px; }
+.auth-card-simple input { height: 45px; font-size: 14px; }
 .auth-footer-note { margin: 18px 0 0; color: #97a2b2; text-align: center; font-size: 10px; }
+.auth-method-tabs { width: 100%; margin-bottom: 6px; padding: 4px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px; background: #f2f5f9; border: 1px solid #e5eaf1; border-radius: 10px; }
+.auth-method-tabs button { min-width: 0; height: 38px; display: flex; align-items: center; justify-content: center; gap: 7px; color: #7c899b; background: transparent; border: 0; border-radius: 7px; cursor: pointer; font-size: 11px; font-weight: 700; transition: color .18s ease, background .18s ease, box-shadow .18s ease; }
+.auth-method-tabs button:hover { color: #4f6582; }
+.auth-method-tabs button.is-active { color: #3f669d; background: #fff; box-shadow: 0 2px 8px rgba(38,59,87,.08); }
+.auth-method-tabs button:nth-child(2).is-active { color: #168b58; }
+.auth-method-tabs svg { width: 16px; height: 16px; }
+.auth-email-fields { display: grid; }
+.auth-wechat-panel { min-height: 385px; display: flex; flex-direction: column; }
+.auth-wechat-panel > label { flex: 0 0 auto; }
+.auth-qr-stage { height: 298px; margin-top: 13px; position: relative; overflow: hidden; display: grid; place-items: center; background: #fbfcfe; border: 1px solid #e2e8f0; border-radius: 11px; }
+.auth-qr-mount { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: center; overflow: hidden; }
+.auth-qr-mount iframe { width: 300px !important; height: 400px !important; margin-top: -12px; border: 0; transform: scale(.78); transform-origin: top center; }
+.auth-qr-state { position: absolute; inset: 0; z-index: 2; padding: 30px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; color: #728096; background: #fbfcfe; text-align: center; }
+.auth-qr-state > svg { width: 42px; height: 42px; color: #6f92c8; }
+.auth-qr-state strong { color: #3c4f68; font-size: 12px; }
+.auth-qr-state small { color: #95a0ae; font-size: 9px; }
+.auth-qr-state button { height: 34px; margin-top: 5px; padding: 0 15px; color: #fff; background: #668fd7; border: 0; border-radius: 8px; cursor: pointer; font-size: 10px; font-weight: 700; }
+.auth-qr-state.is-error > svg { color: #c0777d; }
+.auth-qr-help { margin: 10px 10px 0; color: #8290a2; text-align: center; font-size: 9px; line-height: 1.6; }
+.auth-wechat-fallback { margin: 6px auto 0; padding: 4px 7px; color: #7185a0; background: transparent; border: 0; cursor: pointer; font-size: 9px; }
+.auth-wechat-fallback:hover { color: #3f669d; }
+.auth-wechat-fallback:disabled { color: #b0b8c3; cursor: not-allowed; }
+.is-spinning { animation: kw-auth-spin .8s linear infinite; }
+@keyframes kw-auth-spin { to { transform: rotate(360deg); } }
+.auth-divider { height: 30px; position: relative; display: flex; align-items: center; justify-content: center; color: #9ba6b5; font-size: 10px; }
+.auth-divider::before { content: ""; width: 100%; height: 1px; position: absolute; background: #e7ebf1; }
+.auth-divider span { padding: 0 11px; position: relative; background: #fff; }
+.auth-wechat { width: 100%; height: 43px; padding: 0 12px; display: grid; grid-template-columns: 27px 1fr 20px; align-items: center; gap: 9px; color: #34475e; background: #fff; border: 1px solid #dce4ea; border-radius: 8px; cursor: pointer; }
+.auth-wechat:hover { background: #f4fbf7; border-color: #9ed6ba; }
+.auth-wechat:disabled { opacity: .6; cursor: wait; }
+.auth-wechat > span { width: 27px; height: 27px; display: grid; place-items: center; color: #fff; background: #1aad6f; border-radius: 8px; }
+.auth-wechat > span svg { width: 17px; }
+.auth-wechat > svg { width: 18px; color: #8291a4; }
+.auth-wechat strong { text-align: center; font-size: 12px; }
+.auth-wechat-note { margin-top: 8px; display: block; color: #a18b6c; text-align: center; font-size: 9px; }
+@media (max-height: 820px) {
+  .auth-shell-simple { padding-block: 20px; }
+  .auth-brand-centered { margin-bottom: 13px; }
+  .auth-brand-centered .auth-brand-lockup { width: 230px; }
+  .auth-simple-wrap { width: min(440px, 100%); }
+  .auth-card-simple { padding: 22px 27px; }
+  .auth-card-simple .auth-card-heading p { margin-bottom: 12px; }
+  .auth-card label { margin-top: 9px; }
+  .auth-card input { height: 39px; }
+  .auth-method-tabs button { height: 35px; }
+  .auth-submit { height: 40px; margin-top: 15px; }
+  .auth-qr-stage { height: 274px; }
+  .auth-wechat-panel { min-height: 346px; }
+}
+
+@media (max-width: 520px) {
+  .auth-shell-simple { padding: 18px 14px 28px; }
+  .auth-brand-centered { margin-bottom: 15px; }
+  .auth-card-simple { padding: 24px 20px; }
+  .auth-qr-stage { height: 285px; }
+}
 
 .modal-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 20px; background: rgba(24,34,49,.32); backdrop-filter: blur(3px); }
 .captcha-modal, .workspace-modal { width: min(480px, 100%); overflow: hidden; background: #fff; border: 1px solid #dce3ec; border-radius: 13px; box-shadow: 0 24px 70px rgba(28,40,59,.18); }

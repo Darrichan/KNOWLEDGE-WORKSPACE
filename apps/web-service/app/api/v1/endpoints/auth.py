@@ -92,6 +92,38 @@ async def wechat_status() -> dict[str, bool | str]:
     return {"configured": configured, "provider": "wechat-open-platform"}
 
 
+@router.get("/wechat/qr-config")
+async def wechat_qr_config(
+    invite_code: str | None = Query(default=None, max_length=128),
+    next_path: str = Query(default="/", max_length=300),
+) -> dict[str, bool | str | int]:
+    """Return the public parameters required by WeChat's desktop QR widget.
+
+    The AppSecret never leaves the server. The signed state keeps registration
+    invites and the post-login destination out of client-controlled callback
+    parameters.
+    """
+    settings = get_settings()
+    configured = bool(
+        settings.wechat_open_app_id
+        and settings.wechat_open_app_secret
+        and settings.wechat_open_redirect_uri
+    )
+    if not configured:
+        return {"configured": False, "provider": "wechat-open-platform"}
+
+    state = create_wechat_oauth_state(invite_code, next_path)
+    return {
+        "configured": True,
+        "provider": "wechat-open-platform",
+        "appid": settings.wechat_open_app_id,
+        "scope": "snsapi_login",
+        "redirect_uri": settings.wechat_open_redirect_uri,
+        "state": state,
+        "expires_in": 600,
+    }
+
+
 @router.get("/wechat/authorize")
 async def wechat_authorize(
     invite_code: str | None = Query(default=None, max_length=128),
