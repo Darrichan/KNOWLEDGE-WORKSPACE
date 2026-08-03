@@ -1,0 +1,104 @@
+name: Deploy KW production
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/deploy-production.yml"
+      - "apps/web-service/**"
+      - "deploy/**"
+      - "public/**"
+      - "scripts/**"
+      - "src/**"
+      - "tests/**"
+      - "worker/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.mjs"
+      - "Makefile"
+  workflow_dispatch:
+
+concurrency:
+  group: kw-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Build and check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Build PC frontend
+        run: npm ci && npm run build
+
+      - name: Test frontend package
+        run: npm run test:sites
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Check Python API
+        working-directory: apps/web-service
+        run: uv sync --frozen && uv run ruff check app
+
+      - name: Validate production Compose
+        run: docker compose --env-file deploy/.env.production.example -f deploy/compose.prod.yaml config --quiet
+
+  deploy:
+    name: Deploy to Hong Kong server
+    needs: verify
+    if: github.event_name == 'workflow_dispatch' || vars.KW_AUTO_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Configure SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.KW_DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.KW_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/kw_deploy
+          chmod 600 ~/.ssh/kw_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Pull and deploy
+        env:
+          DEPLOY_HOST: ${{ secrets.KW_DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.KW_DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.KW_DEPLOY_USER }}
+        run: |
+          ssh -i ~/.ssh/kw_deploy -p "${DEPLOY_PORT:-22}" \
+            -o BatchMode=yes -o StrictHostKeyChecking=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -se' <<'REMOTE'
+          set -Eeuo pipefail
+          exec 9>/tmp/kw-production-deploy.lock
+          flock -n 9 || { echo "Another KW deployment is already running"; exit 1; }
+          cd /opt/knowledge-workspace
+          test -f deploy/.env.production
+          test -z "$(git status --porcelain --untracked-files=no)" || {
+            echo "Production checkout contains tracked local changes; deployment stopped"
+            exit 1
+          }
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          make prod-up
+          make prod-status
+          curl --fail --silent --show-error --retry 6 --retry-delay 5 \
+            http://127.0.0.1:8081/health
+          REMOTE

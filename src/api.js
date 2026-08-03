@@ -88,6 +88,7 @@ export const api = {
   verifyCaptcha: (payload) => request("/auth/captcha/verify", { method: "POST", body: JSON.stringify(payload) }),
   login: (payload) => request("/auth/login", { method: "POST", body: JSON.stringify(payload) }),
   register: (payload) => request("/auth/register", { method: "POST", body: JSON.stringify(payload) }),
+  wechatBinding: () => request("/auth/wechat/binding"),
   logout: () => request("/auth/logout", { method: "POST" }),
   listWorkspaces: () => request("/workspaces"),
   listDocuments: (workspaceId) => request(`/workspaces/${workspaceId}/documents`),

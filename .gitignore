@@ -12,6 +12,7 @@ apps/web-service/.venv/
 apps/web-service/.env
 apps/web-service/.coverage
 deploy/.env
+deploy/.env.production
 uploads/
 apps/web-service/uploads/
 design-qa/

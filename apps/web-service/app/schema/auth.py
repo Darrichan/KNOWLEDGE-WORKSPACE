@@ -36,6 +36,16 @@ class CaptchaTicketResponse(BaseModel):
     expires_in: int
 
 
+class WechatMiniBindRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=256)
+
+
+class WechatBindingResponse(BaseModel):
+    bound: bool
+    nickname: str | None = None
+    avatar_url: str | None = None
+
+
 class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

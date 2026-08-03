@@ -86,3 +86,36 @@ def validate_captcha_ticket(token: str) -> None:
         raise ValueError("invalid captcha ticket") from error
     if payload.get("type") != "captcha_ticket":
         raise ValueError("invalid captcha ticket")
+
+
+def create_wechat_oauth_state(invite_code: str | None, next_path: str) -> str:
+    settings = get_settings()
+    now = datetime.now(UTC)
+    safe_next_path = (
+        next_path
+        if next_path.startswith("/") and not next_path.startswith("//")
+        else "/"
+    )
+    payload: dict[str, Any] = {
+        "sub": str(uuid4()),
+        "type": "wechat_oauth_state",
+        "invite_code": (invite_code or "").strip(),
+        "next_path": safe_next_path,
+        "iat": now,
+        "exp": now + timedelta(minutes=10),
+    }
+    return jwt.encode(payload, settings.secret_key, algorithm=ALGORITHM)
+
+
+def decode_wechat_oauth_state(token: str) -> dict[str, str]:
+    settings = get_settings()
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+    except jwt.PyJWTError as error:
+        raise ValueError("invalid wechat oauth state") from error
+    if payload.get("type") != "wechat_oauth_state":
+        raise ValueError("invalid wechat oauth state")
+    return {
+        "invite_code": str(payload.get("invite_code") or ""),
+        "next_path": str(payload.get("next_path") or "/"),
+    }

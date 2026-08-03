@@ -66,6 +66,8 @@ import {
   Trash,
   Users,
   WarningCircle,
+  WechatLogo,
+  X,
   Star,
 } from "@phosphor-icons/react";
 import { api, ApiError } from "./api.js";
@@ -342,6 +344,14 @@ function ContentOpenLoading({ document }) {
   return <div className="content-open-loading" role="status" aria-live="polite"><span><SpinnerGap /></span><strong>{labels[document?.type] || "正在打开内容"}…</strong><small>{document?.title || "正在从服务器读取最新内容"}</small></div>;
 }
 
+function WechatBindingNotice({ onOpen, onDismiss }) {
+  return <div className="wechat-binding-notice" role="status"><span><WechatLogo weight="fill" /></span><div><strong>绑定微信，登录更方便</strong><small>绑定后可使用 KW 小程序，并在 PC 端扫码确认登录。</small></div><button className="wechat-binding-primary" onClick={onOpen}>去绑定</button><button className="wechat-binding-dismiss" aria-label="暂时关闭" onClick={onDismiss}><X /></button></div>;
+}
+
+function WechatBindingDialog({ status, loading, onRefresh, onClose }) {
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="wechat-binding-dialog" role="dialog" aria-modal="true" aria-labelledby="wechat-binding-title"><header><span><WechatLogo weight="fill" /></span><div><h2 id="wechat-binding-title">绑定微信账号</h2><p>一个 KW 账号只能绑定一个微信账号。</p></div><button aria-label="关闭" onClick={onClose}><X /></button></header>{status?.bound ? <div className="wechat-binding-success"><CheckCircle weight="fill" /><strong>微信已绑定</strong><p>{status.nickname || "当前账号已经可以使用小程序和扫码登录。"}</p></div> : <div className="wechat-binding-steps"><ol><li><b>1</b><span>打开“KW”微信小程序</span></li><li><b>2</b><span>进入“我的”，点击“绑定当前微信”</span></li><li><b>3</b><span>回到这里刷新绑定状态</span></li></ol><p>首次绑定需要先在小程序登录当前 KW 账号，绑定完成后同一微信不能用于其他账号。</p></div>}<footer><button onClick={onClose}>稍后处理</button><button className="primary" disabled={loading} onClick={onRefresh}>{loading ? "正在检查…" : status?.bound ? "完成" : "我已绑定，刷新状态"}</button></footer></section></div>;
+}
+
 function DocumentTreeNode({ document, depth, childrenByParent, expandedFolderIds, activeDocumentId, openingDocumentId, section, onToggleFolder, onOpenDocument, onOpenFolder, onMove, onDuplicate, onDelete, ancestors = new Set() }) {
   if (ancestors.has(document.id)) return null;
   const isFolder = document.type === "folder";
@@ -365,6 +375,7 @@ function Sidebar({
   workspace, user, onLogout, section, onNavigate, onOpenFolder, onSearch,
   onMove, onDuplicate, onDelete, onUpdatePublicId,
   appearanceTheme, glassEnabled, onAppearanceTheme, onGlassEnabled,
+  wechatBinding, onWechatBindingHelp,
 }) {
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -450,7 +461,7 @@ function Sidebar({
           </button>
           <button className="workspace-appearance-trigger" onClick={() => setWorkspaceMenu(!workspaceMenu)} aria-expanded={workspaceMenu} aria-label="打开外观设置" title="外观设置"><Palette weight="fill" /></button>
         </div>
-        {workspaceMenu && <div className="workspace-popover"><strong>{workspace.name}</strong><span>当前为个人自托管空间</span><small>{documents.length} 个内容节点</small><section className="workspace-appearance-settings"><div><Palette /><strong>工作区外观</strong></div><label>主题色<span className="appearance-swatches">{appearanceThemes.map((theme) => <button type="button" key={theme.id} className={appearanceTheme === theme.id ? "selected" : ""} style={{ "--appearance-color": theme.color }} title={theme.label} aria-label={theme.label} onClick={() => onAppearanceTheme(theme.id)} />)}</span></label><label>导航栏与侧边栏毛玻璃<input type="checkbox" checked={glassEnabled} onChange={(event) => onGlassEnabled(event.target.checked)} /></label></section><form className="public-id-setting" onSubmit={async (event) => { event.preventDefault(); setPublicIdError(""); try { await onUpdatePublicId(publicId); } catch (error) { setPublicIdError(error.message || "保存失败"); } }}><label>公开用户名 ID<input required minLength={3} maxLength={40} pattern="[a-z0-9][a-z0-9-]*" value={publicId} onChange={(event) => setPublicId(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} /></label><button>保存</button></form>{publicIdError && <em>{publicIdError}</em>}</div>}
+        {workspaceMenu && <div className="workspace-popover"><strong>{workspace.name}</strong><span>当前为个人自托管空间</span><small>{documents.length} 个内容节点</small><button className={`workspace-wechat-status ${wechatBinding?.bound ? "is-bound" : "is-unbound"}`} onClick={onWechatBindingHelp}><WechatLogo weight="fill" /><span><strong>{wechatBinding?.bound ? "微信已绑定" : "微信未绑定"}</strong><small>{wechatBinding?.bound ? "可使用小程序与扫码登录" : "绑定后可快捷登录"}</small></span><CaretRight /></button><section className="workspace-appearance-settings"><div><Palette /><strong>工作区外观</strong></div><label>主题色<span className="appearance-swatches">{appearanceThemes.map((theme) => <button type="button" key={theme.id} className={appearanceTheme === theme.id ? "selected" : ""} style={{ "--appearance-color": theme.color }} title={theme.label} aria-label={theme.label} onClick={() => onAppearanceTheme(theme.id)} />)}</span></label><label>导航栏与侧边栏毛玻璃<input type="checkbox" checked={glassEnabled} onChange={(event) => onGlassEnabled(event.target.checked)} /></label></section><form className="public-id-setting" onSubmit={async (event) => { event.preventDefault(); setPublicIdError(""); try { await onUpdatePublicId(publicId); } catch (error) { setPublicIdError(error.message || "保存失败"); } }}><label>公开用户名 ID<input required minLength={3} maxLength={40} pattern="[a-z0-9][a-z0-9-]*" value={publicId} onChange={(event) => setPublicId(event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} /></label><button>保存</button></form>{publicIdError && <em>{publicIdError}</em>}</div>}
       </div>
       <div className="search-box">
         <MagnifyingGlass /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题和正文" /><span className="shortcut">⌘ K</span>
@@ -1053,6 +1064,8 @@ export function App() {
   const [dialogLoading, setDialogLoading] = useState(false);
   const [pendingActions, setPendingActions] = useState(() => new Set());
   const [openingDocumentId, setOpeningDocumentId] = useState(null);
+  const [wechatBinding, setWechatBinding] = useState({ loading: true, bound: true, nickname: null });
+  const [wechatNoticeVisible, setWechatNoticeVisible] = useState(() => Number(window.localStorage.getItem("zhiliu-wechat-notice-until") || 0) < Date.now());
   const [appearanceTheme, setAppearanceTheme] = useState(() => window.localStorage.getItem("zhiliu-appearance-theme") || "blue");
   const [glassEnabled, setGlassEnabled] = useState(() => window.localStorage.getItem("zhiliu-glass-enabled") === "true");
   const [nodes, setNodes, applyNodesChange] = useNodesState(cloneGraph(starterNodes));
@@ -1160,7 +1173,29 @@ export function App() {
       currentDocuments = [welcome]; setDocuments(currentDocuments);
     }
     setUser(currentUser); setWorkspace(currentWorkspace); replaceActiveDocument(currentDocuments.find((item) => item.type === "document") || currentDocuments[0] || null); setSection("home"); setSessionState("ready");
+    api.wechatBinding().then((binding) => setWechatBinding({ ...binding, loading: false })).catch(() => setWechatBinding({ loading: false, bound: true, nickname: null }));
   }, [refreshCollections, replaceActiveDocument]);
+
+  const refreshWechatBinding = async () => {
+    setWechatBinding((current) => ({ ...current, loading: true }));
+    try {
+      const binding = await api.wechatBinding();
+      setWechatBinding({ ...binding, loading: false });
+      if (binding.bound) {
+        setWechatNoticeVisible(false);
+        setDialog(null);
+        setSaveLabel("微信绑定成功");
+      }
+    } catch (error) {
+      setWechatBinding((current) => ({ ...current, loading: false }));
+      setSaveLabel(error.message || "无法读取微信绑定状态");
+    }
+  };
+
+  const dismissWechatNotice = () => {
+    window.localStorage.setItem("zhiliu-wechat-notice-until", String(Date.now() + 24 * 60 * 60 * 1000));
+    setWechatNoticeVisible(false);
+  };
 
   useEffect(() => {
     if (bootStartedRef.current) return;
@@ -1943,8 +1978,9 @@ export function App() {
   const openingDocument = openingDocumentId ? [...documents, ...sharedDocuments, ...recentDocuments].find((item) => item.id === openingDocumentId) : null;
   return (
     <main className={shellClass}>
-      <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((value) => !value)} documents={documents} activeDocumentId={activeDocument?.id} openingDocumentId={openingDocumentId} onOpenDocument={openDocument} workspace={workspace} user={user} onLogout={logout} section={section} onNavigate={navigate} onOpenFolder={(folderId) => { setCurrentFolderId(folderId); navigate("space"); }} onSearch={api.searchDocuments} onMove={showMove} onDuplicate={duplicateItem} onDelete={deleteItem} onUpdatePublicId={updateCurrentPublicId} appearanceTheme={appearanceTheme} glassEnabled={glassEnabled} onAppearanceTheme={setAppearanceTheme} onGlassEnabled={setGlassEnabled} />
+      <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((value) => !value)} documents={documents} activeDocumentId={activeDocument?.id} openingDocumentId={openingDocumentId} onOpenDocument={openDocument} workspace={workspace} user={user} onLogout={logout} section={section} onNavigate={navigate} onOpenFolder={(folderId) => { setCurrentFolderId(folderId); navigate("space"); }} onSearch={api.searchDocuments} onMove={showMove} onDuplicate={duplicateItem} onDelete={deleteItem} onUpdatePublicId={updateCurrentPublicId} appearanceTheme={appearanceTheme} glassEnabled={glassEnabled} onAppearanceTheme={setAppearanceTheme} onGlassEnabled={setGlassEnabled} wechatBinding={wechatBinding} onWechatBindingHelp={() => setDialog({ type: "wechat-binding" })} />
       <section className="workspace">
+        {!wechatBinding.loading && !wechatBinding.bound && wechatNoticeVisible && <WechatBindingNotice onOpen={() => setDialog({ type: "wechat-binding" })} onDismiss={dismissWechatNotice} />}
         {openingDocumentId && <ContentOpenLoading document={openingDocument} />}
         {section !== "document" && saveLabel && <div className="save-toast library-save-toast"><Check /> {saveLabel}</div>}
         {section === "document" && activeDocument ? <>
@@ -1966,6 +2002,7 @@ export function App() {
       {dialog?.type === "permanent-delete" && <ConfirmDialog title="永久删除" description={`「${dialog.document.title}」将从数据库和文件存储中彻底删除，无法恢复。`} confirmLabel="永久删除" danger loading={pendingActions.has(`permanent-delete:${dialog.document.id}`)} onClose={() => setDialog(null)} onConfirm={confirmPermanentDelete} />}
       {dialog?.type === "batch-permanent-delete" && <ConfirmDialog title="批量永久删除" description={`选中的 ${dialog.documents.length} 项内容将从数据库和文件存储中彻底删除，无法恢复。`} confirmLabel={`永久删除 ${dialog.documents.length} 项`} danger loading={pendingActions.has(`batch-permanent-delete:${dialog.documents.map((item) => item.id).sort().join(":")}`)} onClose={() => setDialog(null)} onConfirm={confirmBatchPermanentDelete} />}
       {dialog?.type === "unpublish" && <ConfirmDialog title="取消发布" description={`「${dialog.document.title}」将不再出现在公开前台，但仍保留在你的空间中。`} confirmLabel="取消发布" loading={pendingActions.has(`unpublish:${dialog.document.id}`)} onClose={() => setDialog(null)} onConfirm={confirmUnpublish} />}
+      {dialog?.type === "wechat-binding" && <WechatBindingDialog status={wechatBinding} loading={wechatBinding.loading} onRefresh={refreshWechatBinding} onClose={() => setDialog(null)} />}
     </main>
   );
 }

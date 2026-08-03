@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     trash_retention_days: int = Field(default=7, ge=1, le=365)
     trash_cleanup_interval_seconds: int = Field(default=3600, ge=60)
     registration_invite_codes: Annotated[list[str], NoDecode] = []
+    wechat_open_app_id: str = ""
+    wechat_open_app_secret: str = ""
+    wechat_open_redirect_uri: str = ""
+    wechat_login_success_url: str = "http://localhost:8080/"
+    wechat_mini_app_id: str = ""
+    wechat_mini_app_secret: str = ""
 
     @field_validator("cors_origins", mode="before")
     @classmethod
