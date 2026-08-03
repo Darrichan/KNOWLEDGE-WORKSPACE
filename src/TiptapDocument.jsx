@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EditorContent, NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor } from "@tiptap/react";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import { common, createLowlight } from "lowlight";
@@ -12,6 +12,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Color from "@tiptap/extension-color";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { MindMapBlock } from "./MindMapBlock.jsx";
+import { normalizeDocumentContent } from "./defaultContent.js";
 
 const lowlight = createLowlight(common);
 
@@ -49,6 +50,7 @@ export function TiptapDocument({ documentId, content, onChange, onEditorReady, m
   const suppressUpdateRef = useRef(true);
   const [imagePreview, setImagePreview] = useState(null);
   const [imageZoom, setImageZoom] = useState(1);
+  const safeContent = useMemo(() => normalizeDocumentContent(content), [content]);
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -74,7 +76,7 @@ export function TiptapDocument({ documentId, content, onChange, onEditorReady, m
       MindMapBlock.configure({ actions: mindMapActions || {} }),
       Placeholder.configure({ placeholder: "输入 / 开始写作…" }),
     ],
-    content,
+    content: safeContent,
     editable,
     editorProps: { attributes: { class: "tiptap-editor" } },
     onUpdate: ({ editor: currentEditor }) => {
@@ -84,13 +86,13 @@ export function TiptapDocument({ documentId, content, onChange, onEditorReady, m
 
   useEffect(() => {
     if (!editor) return;
-    const nextContent = content || { type: "doc", content: [] };
+    const nextContent = safeContent;
     if (JSON.stringify(editor.getJSON()) === JSON.stringify(nextContent)) { suppressUpdateRef.current = false; return; }
     suppressUpdateRef.current = true;
     editor.commands.setContent(nextContent, { emitUpdate: false });
     const frame = window.requestAnimationFrame(() => { suppressUpdateRef.current = false; });
     return () => window.cancelAnimationFrame(frame);
-  }, [content, documentId, editor]);
+  }, [documentId, editor, safeContent]);
 
   useEffect(() => {
     if (editor) editor.setEditable(editable);

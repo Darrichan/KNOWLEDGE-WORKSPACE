@@ -44,6 +44,46 @@ export const blankDocumentContent = {
   content: [{ type: "paragraph", content: [] }],
 };
 
+function normalizeLinkMark(mark) {
+  if (!mark || typeof mark !== "object" || mark.type !== "link") return mark;
+  const href = mark.attrs?.href;
+  if (typeof href !== "string" || !href.trim()) return null;
+
+  const attrs = { ...(mark.attrs || {}), href: href.trim() };
+  if (attrs.target != null && typeof attrs.target !== "string") delete attrs.target;
+  if (attrs.rel != null && typeof attrs.rel !== "string") delete attrs.rel;
+  if (attrs.class != null && typeof attrs.class !== "string") delete attrs.class;
+  return { ...mark, attrs };
+}
+
+function normalizeDocumentNode(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const node = { ...value };
+
+  if (Object.prototype.hasOwnProperty.call(node, "text") && typeof node.text !== "string") {
+    node.text = node.text == null ? "" : String(node.text);
+  }
+  if (Array.isArray(node.marks)) {
+    node.marks = node.marks
+      .map(normalizeLinkMark)
+      .filter((mark) => mark && typeof mark === "object" && typeof mark.type === "string");
+  }
+  if (Array.isArray(node.content)) {
+    node.content = node.content.map(normalizeDocumentNode).filter(Boolean);
+  }
+  return node;
+}
+
+// Historical documents may contain malformed mark attributes produced by older
+// clients. Tiptap's Link extension expects href to always be a string and will
+// otherwise throw while rendering, taking down the whole React tree.
+export function normalizeDocumentContent(content = blankDocumentContent) {
+  const normalized = normalizeDocumentNode(content);
+  if (!normalized || normalized.type !== "doc") return cloneDocumentContent(blankDocumentContent);
+  if (!Array.isArray(normalized.content)) normalized.content = [];
+  return normalized;
+}
+
 export function cloneDocumentContent(content = defaultDocumentContent) {
   return JSON.parse(JSON.stringify(content));
 }
