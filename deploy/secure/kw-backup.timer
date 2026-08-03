@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the KW backup every day
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Asia/Shanghai
+RandomizedDelaySec=15m
+Persistent=true
+Unit=kw-backup.service
+
+[Install]
+WantedBy=timers.target

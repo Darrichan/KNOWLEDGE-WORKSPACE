@@ -138,35 +138,39 @@ curl -fsS https://kw.darrichan.top/health
 
 ## 9. 备份
 
-创建独立备份目录：
-
-```bash
-mkdir -p /opt/backups/knowledge-workspace
-chmod 700 /opt/backups/knowledge-workspace
-```
-
-备份 PostgreSQL：
+安装自动备份脚本和 systemd 定时器：
 
 ```bash
 cd /opt/knowledge-workspace
-backup_stamp=$(date +%F-%H%M%S)
-docker compose --env-file /etc/knowledge-workspace/env \
-  -f /etc/knowledge-workspace/compose.yaml \
-  exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
-  > "/opt/backups/knowledge-workspace/database-${backup_stamp}.dump"
+install -d -m 700 -o root -g root /opt/backups/knowledge-workspace
+install -m 755 -o root -g root deploy/secure/backup-kw \
+  /usr/local/sbin/backup-kw
+install -m 644 -o root -g root deploy/secure/kw-backup.service \
+  /etc/systemd/system/kw-backup.service
+install -m 644 -o root -g root deploy/secure/kw-backup.timer \
+  /etc/systemd/system/kw-backup.timer
+systemctl daemon-reload
+systemctl enable --now kw-backup.timer
+systemctl list-timers kw-backup.timer
 ```
 
-备份上传图片：
+定时器每天北京时间 `03:30` 后随机延迟最多 15 分钟执行，备份 PostgreSQL 与上传图片，生成 SHA-256 校验文件，并自动清理超过 14 天的本机备份。手动执行并检查：
 
 ```bash
-backup_stamp=$(date +%F-%H%M%S)
-docker compose --env-file /etc/knowledge-workspace/env \
-  -f /etc/knowledge-workspace/compose.yaml \
-  exec -T api tar -czf - -C /app/uploads . \
-  > "/opt/backups/knowledge-workspace/uploads-${backup_stamp}.tar.gz"
+/usr/local/sbin/backup-kw
+systemctl status kw-backup.timer --no-pager
+journalctl -u kw-backup.service -n 50 --no-pager
+find /opt/backups/knowledge-workspace -maxdepth 2 -type f -print
 ```
 
-备份必须定期复制到另一台机器或对象存储。
+恢复前应先在临时环境验证校验文件：
+
+```bash
+cd /opt/backups/knowledge-workspace/backup-YYYYMMDD-HHMMSS
+sha256sum --check SHA256SUMS
+```
+
+本机备份只能处理误删或应用故障，不能防止服务器磁盘损坏。备份仍需定期复制到另一台机器或对象存储。
 
 ## 10. 安全边界
 

@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly runtime_dir="/etc/knowledge-workspace"
+readonly compose_file="${runtime_dir}/compose.yaml"
+readonly environment_file="${runtime_dir}/env"
+readonly backup_dir="/opt/backups/knowledge-workspace"
+readonly retention_days="${KW_BACKUP_RETENTION_DAYS:-14}"
+
+if [[ "$(id -u)" -ne 0 ]]; then
+  echo "backup-kw must run as root" >&2
+  exit 77
+fi
+
+if [[ ! "${retention_days}" =~ ^[0-9]+$ ]] ||
+  (( retention_days < 1 || retention_days > 365 )); then
+  echo "KW_BACKUP_RETENTION_DAYS must be between 1 and 365" >&2
+  exit 64
+fi
+
+for protected_file in "${compose_file}" "${environment_file}"; do
+  [[ -f "${protected_file}" ]] || {
+    echo "Missing protected runtime file: ${protected_file}" >&2
+    exit 78
+  }
+  [[ "$(stat -c '%U:%G' "${protected_file}")" == "root:root" ]] || {
+    echo "Protected runtime file is not owned by root: ${protected_file}" >&2
+    exit 78
+  }
+done
+
+exec 9>/run/lock/kw-production-backup.lock
+flock -n 9 || {
+  echo "Another KW backup is already running" >&2
+  exit 75
+}
+
+install -d -m 700 -o root -g root "${backup_dir}"
+
+readonly backup_stamp="$(date +%Y%m%d-%H%M%S)"
+working_dir="$(mktemp -d "${backup_dir}/.tmp-${backup_stamp}-XXXXXX")"
+readonly working_dir
+readonly final_dir="${backup_dir}/backup-${backup_stamp}"
+
+cleanup() {
+  if [[ -d "${working_dir}" ]]; then
+    rm -rf -- "${working_dir}"
+  fi
+}
+trap cleanup EXIT
+
+compose=(docker compose --env-file "${environment_file}" -f "${compose_file}")
+"${compose[@]}" config --quiet
+
+running_services="$("${compose[@]}" ps --status running --services)"
+grep -qx postgres <<<"${running_services}" || {
+  echo "KW postgres container is not running" >&2
+  exit 69
+}
+grep -qx api <<<"${running_services}" || {
+  echo "KW api container is not running" >&2
+  exit 69
+}
+
+"${compose[@]}" exec -T postgres sh -c \
+  'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
+  > "${working_dir}/database.dump"
+[[ -s "${working_dir}/database.dump" ]] || {
+  echo "PostgreSQL backup is empty" >&2
+  exit 74
+}
+
+"${compose[@]}" exec -T api python -c \
+  'import sys, tarfile; archive = tarfile.open(fileobj=sys.stdout.buffer, mode="w|gz"); archive.add("/app/uploads", arcname="uploads"); archive.close()' \
+  > "${working_dir}/uploads.tar.gz"
+[[ -s "${working_dir}/uploads.tar.gz" ]] || {
+  echo "Uploads backup is empty" >&2
+  exit 74
+}
+
+(
+  cd "${working_dir}"
+  sha256sum database.dump uploads.tar.gz > SHA256SUMS
+  sha256sum --check SHA256SUMS
+)
+
+cat > "${working_dir}/metadata.txt" <<EOF
+created_at=$(date --iso-8601=seconds)
+retention_days=${retention_days}
+database_file=database.dump
+uploads_file=uploads.tar.gz
+EOF
+
+chmod -R go-rwx "${working_dir}"
+mv "${working_dir}" "${final_dir}"
+trap - EXIT
+
+find "${backup_dir}" \
+  -mindepth 1 -maxdepth 1 -type d -name 'backup-*' \
+  -mtime "+${retention_days}" -print -exec find {} -depth -delete \;
+find "${backup_dir}" \
+  -mindepth 1 -maxdepth 1 -type d -name '.tmp-*' \
+  -mtime +1 -print -exec find {} -depth -delete \;
+
+echo "KW backup completed: ${final_dir}"
+du -sh "${final_dir}"
