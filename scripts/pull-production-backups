@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly remote_host="156.225.23.173"
+readonly remote_user="kwbackup"
+readonly remote_dir="/opt/backups/knowledge-workspace"
+readonly identity_file="${HOME}/.ssh/kw_backup_pull_ed25519"
+readonly local_dir="${HOME}/Backups/knowledge-workspace"
+readonly retention_days=30
+readonly lock_dir="/tmp/kw-backup-pull-${UID}.lock"
+
+if ! mkdir "${lock_dir}" 2>/dev/null; then
+  echo "Another KW backup pull is already running" >&2
+  exit 75
+fi
+cleanup_lock() {
+  rmdir "${lock_dir}" 2>/dev/null || true
+}
+trap cleanup_lock EXIT
+
+[[ -f "${identity_file}" ]] || {
+  echo "Missing backup SSH key: ${identity_file}" >&2
+  exit 78
+}
+
+install -d -m 700 "${local_dir}"
+
+ssh_options=(
+  -i "${identity_file}"
+  -o BatchMode=yes
+  -o StrictHostKeyChecking=yes
+  -o ConnectTimeout=15
+)
+
+remote_backups="$(
+  ssh "${ssh_options[@]}" "${remote_user}@${remote_host}" \
+    "find ${remote_dir} -mindepth 1 -maxdepth 1 -type d -name 'backup-*' -printf '%f\\n'"
+)"
+
+while IFS= read -r backup_name; do
+  [[ -n "${backup_name}" ]] || continue
+  [[ "${backup_name}" =~ ^backup-[0-9]{8}-[0-9]{6}$ ]] || {
+    echo "Ignoring unexpected remote backup name: ${backup_name}" >&2
+    continue
+  }
+
+  final_dir="${local_dir}/${backup_name}"
+  [[ -d "${final_dir}" ]] && continue
+
+  partial_dir="$(mktemp -d "${local_dir}/.partial-${backup_name}-XXXXXX")"
+  if ! scp "${ssh_options[@]}" -p \
+    "${remote_user}@${remote_host}:${remote_dir}/${backup_name}/*" \
+    "${partial_dir}/"; then
+    rm -rf -- "${partial_dir}"
+    exit 74
+  fi
+
+  (
+    cd "${partial_dir}"
+    shasum -a 256 --check SHA256SUMS
+  )
+
+  chmod -R go-rwx "${partial_dir}"
+  mv "${partial_dir}" "${final_dir}"
+  echo "Downloaded and verified: ${final_dir}"
+done <<<"${remote_backups}"
+
+find "${local_dir}" \
+  -mindepth 1 -maxdepth 1 -type d -name 'backup-*' \
+  -mtime "+${retention_days}" -print -exec find {} -depth -delete \;
+find "${local_dir}" \
+  -mindepth 1 -maxdepth 1 -type d -name '.partial-*' \
+  -mtime +1 -print -exec find {} -depth -delete \;
+
+echo "KW off-server backup pull completed"

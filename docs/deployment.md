@@ -172,6 +172,8 @@ sha256sum --check SHA256SUMS
 
 本机备份只能处理误删或应用故障，不能防止服务器磁盘损坏。备份仍需定期复制到另一台机器或对象存储。
 
+当前使用独立的只读 `kwbackup` 账号，每天将新备份拉取到管理员 Mac 的 `~/Backups/knowledge-workspace`。Mac 端保留 30 天，下载完成后再次验证 `SHA256SUMS`。定时任务配置位于 `deploy/macos/top.darrichan.kw-backup-pull.plist`，拉取脚本位于 `scripts/pull-production-backups`。
+
 ## 10. 安全边界
 
 - 不要执行 `docker compose down -v`，否则会删除 KW 数据库和图片卷。
