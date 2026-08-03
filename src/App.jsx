@@ -145,6 +145,41 @@ const createStarterGraph = (title) => {
   return { nodes, edges: cloneGraph(starterEdges), layout_style: "logic-right" };
 };
 
+const graphHasNodes = (graph) => Array.isArray(graph?.nodes) && graph.nodes.length > 0;
+
+const graphFromMindMapDocument = (document) => {
+  const content = document?.content && typeof document.content === "object" ? document.content : {};
+  if (graphHasNodes(content.graph)) return cloneGraph(content.graph);
+  if (graphHasNodes(content) && content.nodes.some((node) => node?.data && node?.position)) {
+    return {
+      nodes: cloneGraph(content.nodes),
+      edges: Array.isArray(content.edges) ? cloneGraph(content.edges) : [],
+      layout_style: content.layout_style || content.layoutStyle || "logic-right",
+    };
+  }
+  const graph = createStarterGraph(String(content.root || document?.title || "中心主题"));
+  const legacyNodes = Array.isArray(content.nodes) ? content.nodes : [];
+  graph.nodes = [graph.nodes[0], ...legacyNodes.map((node, index) => ({
+    id: String(node?.id || `legacy-${index + 1}`),
+    type: "mindMap",
+    position: { x: 360 + (index % 3) * 260, y: 80 + index * 84 },
+    data: {
+      label: String(node?.label || node?.data?.label || "新主题"),
+      color: node?.color || node?.data?.color,
+      parent_id: node?.parent_id || node?.data?.parent_id || "root",
+      priority: node?.priority ?? node?.data?.priority ?? null,
+      marker: node?.marker ?? node?.data?.marker ?? null,
+      fontSize: node?.fontSize || node?.data?.fontSize,
+    },
+  }))];
+  graph.edges = legacyNodes.map((node, index) => {
+    const target = String(node?.id || `legacy-${index + 1}`);
+    const source = String(node?.parent_id || node?.data?.parent_id || "root");
+    return { id: `${source}-${target}`, source, target };
+  });
+  return graph;
+};
+
 const mindMapThemes = [
   { id: "spectrum", label: "多彩分支", colors: ["#ef6b66", "#e9a63a", "#45a97b", "#4f82d9", "#8b6cc7"] },
   { id: "graphite", label: "经典黑白", colors: ["#30343b", "#737b86"] },
@@ -1214,17 +1249,44 @@ export function App() {
       return undefined;
     }
     let cancelled = false;
+    const fallbackGraph = graphFromMindMapDocument(activeDocument);
+    const showGraph = (graph, title, notice = "") => {
+      if (cancelled) return;
+      const safeGraph = graphHasNodes(graph) ? graph : fallbackGraph;
+      const layoutStyle = normalizeMapLayout(safeGraph.layout_style || safeGraph.layoutStyle || "logic-right");
+      setActiveMindMapTitle(title || activeDocument.title);
+      activeMindMapTitleRef.current = title || activeDocument.title;
+      setMapLayoutStyle(layoutStyle);
+      mapLayoutStyleRef.current = layoutStyle;
+      setNodes(decorateMapNodes(safeGraph.nodes, layoutStyle));
+      setEdges(decorateMapEdges(Array.isArray(safeGraph.edges) ? safeGraph.edges : [], layoutStyle));
+      if (notice) setSaveLabel(notice);
+      if (isStructuredMapLayout(layoutStyle)) window.setTimeout(() => { if (!cancelled) layoutMap(layoutStyle); }, 80);
+    };
+    showGraph(fallbackGraph, activeDocument.title, "正在加载导图…");
     api.listMindMaps(activeDocument.id).then(async (mindMaps) => {
       if (cancelled) return;
       let mindMap = mindMaps[0];
       if (!mindMap && activeDocument.access_role !== "viewer") {
-        mindMap = await api.createMindMap(activeDocument.id, { title: activeDocument.title, graph: createStarterGraph(activeDocument.title) });
+        mindMap = await api.createMindMap(activeDocument.id, { title: activeDocument.title, graph: fallbackGraph });
       }
-      if (cancelled || !mindMap) return;
-      const layoutStyle = normalizeMapLayout(mindMap.graph.layout_style || "cards");
-      activeMindMapIdRef.current = mindMap.id; setActiveMindMapTitle(mindMap.title); activeMindMapTitleRef.current = mindMap.title; setMapLayoutStyle(layoutStyle); mapLayoutStyleRef.current = layoutStyle; mapVersionRef.current = mindMap.version; mapDirtyRef.current = false; mapSaveSerialRef.current = 0; lastMapAutoSaveAtRef.current = 0; setNodes(decorateMapNodes(mindMap.graph.nodes || [], layoutStyle)); setEdges(decorateMapEdges(mindMap.graph.edges || [], layoutStyle));
-      if (isStructuredMapLayout(layoutStyle)) window.setTimeout(() => layoutMap(layoutStyle), 80);
-    }).catch(() => { if (!cancelled) setSaveLabel("导图加载失败"); });
+      if (cancelled || !mindMap) { showGraph(fallbackGraph, activeDocument.title); return; }
+      let graph = mindMap.graph;
+      let recoveredFromHistory = false;
+      if (!graphHasNodes(graph)) {
+        try {
+          const versions = await api.listMindMapVersions(activeDocument.id, mindMap.id);
+          const latestNonEmpty = versions.find((version) => graphHasNodes(version.graph));
+          if (latestNonEmpty) { graph = latestNonEmpty.graph; recoveredFromHistory = true; }
+        } catch { /* The document fallback below remains available. */ }
+      }
+      activeMindMapIdRef.current = mindMap.id;
+      mapVersionRef.current = mindMap.version;
+      mapDirtyRef.current = false;
+      mapSaveSerialRef.current = 0;
+      lastMapAutoSaveAtRef.current = 0;
+      showGraph(graph, mindMap.title, recoveredFromHistory ? "当前版本为空，已显示最近的非空历史版本" : "");
+    }).catch(() => { showGraph(fallbackGraph, activeDocument.title, "导图服务暂时不可用，已显示文档内备份"); });
     return () => { cancelled = true; };
   }, [activeDocument?.id, setEdges, setNodes]);
 
@@ -1383,8 +1445,10 @@ export function App() {
         }
       }
       if (selected.type === "mindmap") {
-        setNodes([]);
-        setEdges([]);
+        const fallbackGraph = graphFromMindMapDocument(selected);
+        const fallbackLayout = normalizeMapLayout(fallbackGraph.layout_style || fallbackGraph.layoutStyle || "logic-right");
+        setNodes(decorateMapNodes(fallbackGraph.nodes, fallbackLayout));
+        setEdges(decorateMapEdges(fallbackGraph.edges || [], fallbackLayout));
         setActiveMindMapTitle(selected.title);
       }
       replaceActiveDocument({ ...selected, access_role: accessRole, owner_name: source?.owner_name || selected.owner_name });
