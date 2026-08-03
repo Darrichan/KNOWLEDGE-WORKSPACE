@@ -34,10 +34,23 @@ from app.service.wechat_auth_service import (
     exchange_mini_program_code,
     exchange_wechat_code,
     get_wechat_binding_status,
+    login_mini_program_user,
     login_or_register_wechat_user,
 )
 
 router = APIRouter()
+
+
+@router.post("/wechat/mini/login", response_model=TokenResponse)
+async def login_wechat_mini_program(
+    payload: WechatMiniBindRequest,
+    response: Response,
+    session: SessionDep,
+) -> TokenResponse:
+    identity_data = await exchange_mini_program_code(payload.code.strip())
+    user, token = await login_mini_program_user(session, identity_data)
+    set_access_cookie(response, token)
+    return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
 
 @router.get("/wechat/binding", response_model=WechatBindingResponse)

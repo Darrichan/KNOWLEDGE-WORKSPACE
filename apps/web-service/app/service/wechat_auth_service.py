@@ -98,6 +98,31 @@ async def get_wechat_binding_status(session: AsyncSession, user_id: Any) -> Wech
     return await session.scalar(select(WechatIdentity).where(WechatIdentity.user_id == user_id))
 
 
+async def login_mini_program_user(
+    session: AsyncSession,
+    identity_data: dict[str, str | None],
+) -> tuple[User, str]:
+    openid = str(identity_data["openid"])
+    unionid = identity_data.get("unionid")
+    conditions = [WechatIdentity.openid == openid]
+    if unionid:
+        conditions.append(WechatIdentity.unionid == unionid)
+    identity = await session.scalar(select(WechatIdentity).where(or_(*conditions)))
+    if identity is None:
+        raise APIError(
+            "WECHAT_NOT_BOUND",
+            "当前微信尚未绑定 KW 账号，请先使用邮箱登录并完成绑定",
+            403,
+        )
+    user = await session.get(User, identity.user_id)
+    if user is None or not user.is_active:
+        raise APIError("USER_DISABLED", "账户不存在或已停用", 403)
+    if unionid and not identity.unionid:
+        identity.unionid = unionid
+        await session.commit()
+    return user, create_access_token(user.id)
+
+
 async def bind_mini_program_identity(
     session: AsyncSession,
     user: User,
