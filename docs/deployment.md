@@ -1,6 +1,6 @@
 # KW 单机生产部署
 
-> 目标环境：已运行 HTML 发布系统的香港 Debian 12 服务器  
+> 目标环境：已运行 HTML 发布系统的香港 Debian 11 服务器
 > 推荐域名：`kw.darrichan.top`  
 > KW 项目目录：`/opt/knowledge-workspace`
 
@@ -40,9 +40,10 @@ git log -1 --oneline
 ## 4. 生产环境变量
 
 ```bash
-cd /opt/knowledge-workspace
-cp deploy/.env.production.example deploy/.env.production
-chmod 600 deploy/.env.production
+install -d -m 700 -o root -g root /etc/knowledge-workspace
+cp /opt/knowledge-workspace/deploy/.env.production.example \
+  /etc/knowledge-workspace/env
+chmod 600 /etc/knowledge-workspace/env
 ```
 
 生成数据库密码和应用密钥：
@@ -62,10 +63,24 @@ openssl rand -hex 32
 
 ## 5. 启动 KW
 
+安装由 root 持有的固定运行配置：
+
 ```bash
 cd /opt/knowledge-workspace
-make prod-up
-make prod-status
+
+install -m 644 deploy/secure/compose.yaml \
+  /etc/knowledge-workspace/compose.yaml
+install -m 644 deploy/secure/Dockerfile.api \
+  /etc/knowledge-workspace/Dockerfile.api
+install -m 644 deploy/secure/Dockerfile.web \
+  /etc/knowledge-workspace/Dockerfile.web
+install -m 755 deploy/secure/deploy-kw \
+  /usr/local/sbin/deploy-kw
+
+docker compose --env-file /etc/knowledge-workspace/env \
+  -f /etc/knowledge-workspace/compose.yaml up -d --build
+docker compose --env-file /etc/knowledge-workspace/env \
+  -f /etc/knowledge-workspace/compose.yaml ps
 curl -fsS http://127.0.0.1:8081/health
 ```
 
@@ -88,7 +103,7 @@ systemctl reload nginx
 curl -i http://kw.darrichan.top/health
 ```
 
-再使用 Certbot 申请独立证书，不会覆盖 `html.darrichan.top` 现有的阿里云证书：
+再使用 Certbot 申请独立证书，不会覆盖 `html.darrichan.top` 的现有证书：
 
 ```bash
 certbot --nginx -d kw.darrichan.top
@@ -109,14 +124,13 @@ https://kw.darrichan.top/api/v1
 
 ## 8. 更新与回滚
 
-正常更新：
+正常更新由 GitHub Actions 自动执行。需要手动重新发布当前 `main` 时：
 
 ```bash
 cd /opt/knowledge-workspace
-git status --short
-git pull --ff-only
-make prod-up
-make prod-status
+git fetch origin main
+export KW_DEPLOY_SHA="$(git rev-parse origin/main)"
+/usr/local/sbin/deploy-kw
 curl -fsS https://kw.darrichan.top/health
 ```
 
@@ -136,7 +150,8 @@ chmod 700 /opt/backups/knowledge-workspace
 ```bash
 cd /opt/knowledge-workspace
 backup_stamp=$(date +%F-%H%M%S)
-docker compose --env-file deploy/.env.production -f deploy/compose.prod.yaml \
+docker compose --env-file /etc/knowledge-workspace/env \
+  -f /etc/knowledge-workspace/compose.yaml \
   exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' \
   > "/opt/backups/knowledge-workspace/database-${backup_stamp}.dump"
 ```
@@ -145,10 +160,10 @@ docker compose --env-file deploy/.env.production -f deploy/compose.prod.yaml \
 
 ```bash
 backup_stamp=$(date +%F-%H%M%S)
-docker run --rm \
-  -v kw_uploads_data:/source:ro \
-  -v /opt/backups/knowledge-workspace:/backup \
-  alpine tar -czf "/backup/uploads-${backup_stamp}.tar.gz" -C /source .
+docker compose --env-file /etc/knowledge-workspace/env \
+  -f /etc/knowledge-workspace/compose.yaml \
+  exec -T api tar -czf - -C /app/uploads . \
+  > "/opt/backups/knowledge-workspace/uploads-${backup_stamp}.tar.gz"
 ```
 
 备份必须定期复制到另一台机器或对象存储。
@@ -157,7 +172,9 @@ docker run --rm \
 
 - 不要执行 `docker compose down -v`，否则会删除 KW 数据库和图片卷。
 - 不要在防火墙或云安全组开放 `8081`/`8000`/`5432`。
-- `deploy/.env.production` 权限保持为 `600`，不提交 Git。
+- `/etc/knowledge-workspace/env` 由 `root:root` 持有，权限保持为 `600`。
+- `deploy` 用户不加入 Docker 组；Docker 组等价于接近 root 权限。
+- Compose、生产 Dockerfile 和部署脚本由 root 安装到 `/etc/knowledge-workspace` 和 `/usr/local/sbin`。
 - 小程序 AppSecret 不得出现在 Taro 前端或云函数返回值中。
 - 上线前确认 HTML 发布系统仍可通过 `https://html.darrichan.top/health` 访问。
 
@@ -169,24 +186,33 @@ docker run --rm \
 2. 运行 Python `ruff` 检查。
 3. 验证生产 Compose。
 4. 通过 SSH 连接服务器。
-5. 执行 `git pull --ff-only` 和 `make prod-up`。
+5. 传入当前 `main` 的精确 40 位 SHA，调用受限的 `/usr/local/sbin/deploy-kw`。
 6. 请求 `127.0.0.1:8081/health` 验收。
 
 小程序或移动端单独改动不会重建服务器端；它们将使用各自的发布流程。
 
 ### 11.1 服务器一次性准备
 
-推荐使用独立 `deploy` 用户，不使用 root 密码自动登录：
+使用独立 `deploy` 用户，但不要将它加入 Docker 组：
 
 ```bash
 adduser --disabled-password --gecos "" deploy
-usermod -aG docker deploy
-chown -R deploy:deploy /opt/knowledge-workspace
+install -d -m 700 -o deploy -g deploy /home/deploy/.ssh
 ```
 
-为 GitHub Actions 生成一把专用 SSH 密钥，将公钥写入服务器 `/home/deploy/.ssh/authorized_keys`，私钥只保存在 GitHub Actions Secret `KW_DEPLOY_SSH_KEY`。
+为 GitHub Actions 生成一把专用 SSH 密钥，将公钥以 `restrict` 选项写入 `/home/deploy/.ssh/authorized_keys`，禁用 PTY 和各类转发。私钥只保存在 GitHub Actions Secret `KW_DEPLOY_SSH_KEY`。
 
-如果仓库是私有的，服务器还需要一把只读 GitHub Deploy Key，使 `/opt/knowledge-workspace` 可以执行 `git pull`。不要把可写 PAT 放入 Git 远程 URL。
+安装受限 sudo 规则：
+
+```bash
+cd /opt/knowledge-workspace
+visudo -cf deploy/secure/sudoers.kw-deploy
+install -m 440 -o root -g root deploy/secure/sudoers.kw-deploy \
+  /etc/sudoers.d/kw-deploy
+visudo -cf /etc/sudoers.d/kw-deploy
+```
+
+`deploy` 用户只能无密码执行 `/usr/local/sbin/deploy-kw`，不能执行 `docker ps`、修改固定 Compose 或读取生产环境变量。
 
 ### 11.2 GitHub Secrets
 
@@ -226,7 +252,7 @@ git push origin main
 
 也可在 GitHub `Actions -> Deploy KW production -> Run workflow` 手动重新发布当前 `main`。
 
-生产目录有未提交的跟踪文件、无法 fast-forward、构建失败或健康检查失败时，流程会立即终止。
+请求的 SHA 不是服务器刚获取到的 `origin/main`、生产目录存在未提交的跟踪文件、root 固定配置权限异常、构建失败或健康检查失败时，流程会立即终止。
 
 ### 11.4 后续升级
 
